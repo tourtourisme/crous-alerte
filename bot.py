@@ -12,15 +12,10 @@ STATE = "state.json"
 
 BASE = "https://trouverunlogement.lescrous.fr"
 SEARCH_URL = f"{BASE}/tools/{TOOL_ID}/search"
-# ZONE="france" = tous les Crous (pour tester) ; sinon Marseille
-FRANCE = os.getenv("ZONE", "marseille").lower() == "france"
-LIEU = "France" if FRANCE else "Marseille"
-PARAMS = {}
-if not FRANCE:
-    PARAMS = {
-        "bounds": "5.2286902_43.3910329_5.5324758_43.1696205",
-        "locationName": "Marseille (13000)",
-    }
+PARAMS = {
+    "bounds": "5.2286902_43.3910329_5.5324758_43.1696205",
+    "locationName": "Marseille (13000)",
+}
 if OCCUPATION:
     PARAMS["occupationModes"] = OCCUPATION
 
@@ -31,7 +26,7 @@ def fetch():
     )
     r.raise_for_status()
     page = r.text
-    if not FRANCE and re.search(r"logements? trouvés? en France", page):
+    if re.search(r"logements? trouvés? en France", page):
         raise RuntimeError("Filtre Marseille non appliqué par le site (résultats pour toute la France)")
     items = {}
     for m in re.finditer(r'href="[^"]*?/accommodations/(\d+)"[^>]*>([^<]*)<', page):
@@ -66,7 +61,7 @@ def check(seen):
     new = [i for i in items if i not in seen]
     for i in new[:10]:
         name = items[i] or "Logement"
-        notify(f"🏠 Logement CROUS disponible ({LIEU})\n{name}\n{BASE}/tools/{TOOL_ID}/accommodations/{i}")
+        notify(f"🏠 Logement CROUS disponible à Marseille\n{name}\n{BASE}/tools/{TOOL_ID}/accommodations/{i}")
     seen.update(items)
     save(seen)
     return len(items)
@@ -80,7 +75,7 @@ def main():
         try:
             n = check(seen)
             if first and os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch":
-                notify(f"✅ Bot démarré : {n} logement(s) trouvé(s) pour l'instant ({LIEU}).")
+                notify(f"✅ Bot démarré : {n} logement(s) trouvé(s) pour l'instant à Marseille.")
         except Exception as e:
             print("Erreur :", e, file=sys.stderr, flush=True)
             if first and os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch":
