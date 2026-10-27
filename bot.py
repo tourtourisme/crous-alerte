@@ -1,36 +1,39 @@
-import json, os, sys, time
+import html, json, os, re, sys, time
 import requests
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 TOOL_ID = os.getenv("CROUS_TOOL_ID", "47")
+# "house_sharing" = colocation ; mets OCCUPATION="" pour tous les types
+OCCUPATION = os.getenv("OCCUPATION", "house_sharing")
 RUN_SECONDS = int(os.getenv("RUN_SECONDS", "0"))  # 0 = tourne sans fin
 INTERVAL = int(os.getenv("INTERVAL", "60"))
 STATE = "state.json"
 
-URL = f"https://trouverunlogement.lescrous.fr/api/fr/search/{TOOL_ID}"
-BODY = {
-    "idTool": int(TOOL_ID),
-    "need_aggregation": True,
-    "page": 1,
-    "pageSize": 24,
-    "sector": None,
-    "occupationModes": [],  # [] = tous les types de logement
-    # rectangle autour de Marseille (haut-gauche, bas-droite)
-    "location": [{"lon": 5.2286902, "lat": 43.3910329}, {"lon": 5.5324758, "lat": 43.1696205}],
-    "residence": None,
-    "precision": 5,
-    "equipment": [],
-    "price": {"max": 10000},
-    "area": {"min": 0},
-    "toolMechanism": "flow",
+BASE = "https://trouverunlogement.lescrous.fr"
+SEARCH_URL = f"{BASE}/tools/{TOOL_ID}/search"
+PARAMS = {
+    "bounds": "5.2286902_43.3910329_5.5324758_43.1696205",
+    "locationName": "Marseille (13000)",
 }
+if OCCUPATION:
+    PARAMS["occupationModes"] = OCCUPATION
 
 
 def fetch():
-    r = requests.post(URL, json=BODY, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+    r = requests.get(
+        SEARCH_URL, params=PARAMS, headers={"User-Agent": "Mozilla/5.0"}, timeout=20
+    )
     r.raise_for_status()
-    return r.json()["results"]["items"]
+    page = r.text
+    if re.search(r"logements? trouvés? en France", page):
+        raise RuntimeError("Filtre Marseille non appliqué par le site (résultats pour toute la France)")
+    items = {}
+    for m in re.finditer(r'href="[^"]*?/accommodations/(\d+)"[^>]*>([^<]*)<', page):
+        name = html.unescape(m.group(2)).strip()
+        if m.group(1) not in items or (name and not items[m.group(1)]):
+            items[m.group(1)] = name
+    return items
 
 
 def notify(text):
@@ -54,23 +57,30 @@ def save(seen):
 
 def check(seen):
     items = fetch()
-    new = [i for i in items if str(i["id"]) not in seen]
+    print(f"{len(items)} logement(s) trouvé(s) : {sorted(items)}", flush=True)
+    new = [i for i in items if i not in seen]
     for i in new[:10]:
-        name = i.get("label") or i.get("residence", {}).get("label", "Logement")
-        link = f"https://trouverunlogement.lescrous.fr/tools/{TOOL_ID}/accommodations/{i['id']}"
-        notify(f"🏠 Logement CROUS disponible à Marseille\n{name}\n{link}")
-    seen.update(str(i["id"]) for i in items)
+        name = items[i] or "Logement"
+        notify(f"🏠 Logement CROUS disponible à Marseille\n{name}\n{BASE}/tools/{TOOL_ID}/accommodations/{i}")
+    seen.update(items)
     save(seen)
+    return len(items)
 
 
 def main():
     seen = load()
     start = time.time()
+    first = True
     while True:
         try:
-            check(seen)
+            n = check(seen)
+            if first and os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch":
+                notify(f"✅ Bot démarré : {n} logement(s) trouvé(s) pour l'instant à Marseille.")
         except Exception as e:
-            print("Erreur :", e, file=sys.stderr)
+            print("Erreur :", e, file=sys.stderr, flush=True)
+            if first and os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch":
+                notify(f"⚠️ Bot démarré mais erreur de recherche : {e}")
+        first = False
         if RUN_SECONDS and time.time() - start + INTERVAL > RUN_SECONDS:
             break
         time.sleep(INTERVAL)
