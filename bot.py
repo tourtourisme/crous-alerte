@@ -3,7 +3,7 @@ import requests
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-TOOL_ID = os.getenv("CROUS_TOOL_ID", "47")      # à vérifier (voir README)
+TOOL_ID = os.getenv("CROUS_TOOL_ID", "47")
 RUN_SECONDS = int(os.getenv("RUN_SECONDS", "0"))  # 0 = tourne sans fin
 INTERVAL = int(os.getenv("INTERVAL", "60"))
 STATE = "state.json"
@@ -15,9 +15,9 @@ BODY = {
     "page": 1,
     "pageSize": 24,
     "sector": None,
-    "occupationModes": [],
+    "occupationModes": [],  # [] = tous les types de logement
     # rectangle autour de Marseille (haut-gauche, bas-droite)
-    "location": [{"lon": 5.20, "lat": 43.42}, {"lon": 5.60, "lat": 43.17}],
+    "location": [{"lon": 5.2286902, "lat": 43.3910329}, {"lon": 5.5324758, "lat": 43.1696205}],
     "residence": None,
     "precision": 5,
     "equipment": [],
