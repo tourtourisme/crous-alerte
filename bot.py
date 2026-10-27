@@ -3,7 +3,7 @@ import requests
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-TOOL_ID = os.getenv("CROUS_TOOL_ID", "41")      # à vérifier (voir README)
+TOOL_ID = os.getenv("CROUS_TOOL_ID", "47")      # à vérifier (voir README)
 RUN_SECONDS = int(os.getenv("RUN_SECONDS", "0"))  # 0 = tourne sans fin
 INTERVAL = int(os.getenv("INTERVAL", "60"))
 STATE = "state.json"
