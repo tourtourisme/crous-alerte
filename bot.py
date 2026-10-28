@@ -28,7 +28,19 @@ def tg(method, **data):
 
 
 def notify(text):
-    tg("sendMessage", chat_id=CHAT_ID, text=text)
+    res = tg("sendMessage", chat_id=CHAT_ID, text=text)
+    return (res.get("result") or {}).get("message_id")
+
+
+def mark_gone(info):
+    """Met une croix sur l'alerte d'un logement qui n'est plus affiché (réservé)."""
+    if not info.get("msg"):
+        return
+    body = "\n".join(info["text"].split("\n")[1:])
+    new_text = "❌ PLUS DISPONIBLE (réservé)\n" + body
+    res = tg("editMessageText", chat_id=CHAT_ID, message_id=info["msg"], text=new_text)
+    if not res.get("ok"):
+        notify(new_text)
 
 
 def load():
@@ -38,8 +50,10 @@ def load():
         d = {}
     if isinstance(d, list):  # ancien format
         d = {"seen": d}
+    if isinstance(d.get("seen"), list):  # ancien format : simple liste d'identifiants
+        d["seen"] = {i: {"msg": None, "text": "", "miss": 0} for i in d["seen"]}
     d.setdefault("url", DEFAULT_URL)
-    d.setdefault("seen", [])
+    d.setdefault("seen", {})
     d.setdefault("offset", 0)
     return d
 
@@ -88,7 +102,7 @@ def handle_updates(st):
         if m:
             url = m.group(0)
             if parse_url(url):
-                st["url"], st["seen"] = url, []
+                st["url"], st["seen"] = url, {}
                 notify(f"✅ Surveillance activée : {place_name(url)}\nVérification chaque minute.")
             else:
                 notify("❌ Lien non reconnu. Envoie un lien de recherche du type "
@@ -101,12 +115,23 @@ def handle_updates(st):
 
 def check(st):
     tool, items = fetch(st["url"])
-    print(f"{len(items)} logement(s) trouvé(s) ({place_name(st['url'])}) : {sorted(items)}", flush=True)
-    seen = set(st["seen"])
+    lieu = place_name(st["url"])
+    print(f"{len(items)} logement(s) trouvé(s) ({lieu}) : {sorted(items)}", flush=True)
+    seen = st["seen"]
+    # logements présents : on remet le compteur d'absence à zéro
+    for i in items:
+        if i in seen:
+            seen[i]["miss"] = 0
+    # logements disparus : croix sur l'alerte après 2 vérifications d'affilée (évite les faux positifs)
+    for i in [i for i in seen if i not in items]:
+        seen[i]["miss"] = seen[i].get("miss", 0) + 1
+        if seen[i]["miss"] >= 2:
+            mark_gone(seen.pop(i))
+    # nouveaux logements (ou revenus après avoir disparu) : nouvelle alerte
     for i in [i for i in items if i not in seen][:10]:
-        notify(f"🏠 Logement CROUS disponible ({place_name(st['url'])})\n"
-               f"{items[i] or 'Logement'}\n{BASE}/tools/{tool}/accommodations/{i}")
-    st["seen"] = sorted(items)  # oublie ceux qui disparaissent : ils re-alertent s'ils reviennent
+        text = (f"🏠 Logement CROUS disponible ({lieu})\n"
+                f"{items[i] or 'Logement'}\n{BASE}/tools/{tool}/accommodations/{i}")
+        seen[i] = {"msg": notify(text), "text": text, "miss": 0}
     save(st)
     return len(items)
 
