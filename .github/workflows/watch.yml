@@ -26,8 +26,6 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RUN_SECONDS: "280"
-          OCCUPATION: ""
-          ZONE: "france"
       - uses: actions/cache/save@v4
         if: always()
         with:
