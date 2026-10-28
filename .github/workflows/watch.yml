@@ -1,15 +1,18 @@
 name: Surveillance CROUS
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/10 * * * *"   # filet de sécurité : relance la surveillance si la chaîne s'arrête
   workflow_dispatch:
 concurrency:
   group: crous
   cancel-in-progress: false
+permissions:
+  actions: write
+  contents: read
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,9 +28,15 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RUN_SECONDS: "280"
+          RUN_SECONDS: "20400"   # ~5 h 40 min, puis le job se relance seul
+          INTERVAL: "20"         # une vérification toutes les 20 secondes
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: state.json
           key: state-${{ github.run_id }}
+      - name: Relancer la surveillance
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run watch.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }}
